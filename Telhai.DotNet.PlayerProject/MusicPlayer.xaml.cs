@@ -47,6 +47,8 @@ namespace Telhai.DotNet.PlayerProject
             this.LoadLibrary();
         }
 
+        //override
+
         private void MusicPlayer_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             MessageBox.Show("Music Player Window Double Clicked!");
