@@ -30,7 +30,7 @@ namespace Telhai.DotNet.PlayerProject
         private bool isDragging = false;
         private const string FILE_NAME = "library.json";
 
-        
+
         public MusicPlayer()
         {
             InitializeComponent();
@@ -68,6 +68,8 @@ namespace Telhai.DotNet.PlayerProject
         // --- EMPTY PLACEHOLDERS TO MAKE IT BUILD ---
         private void BtnPlay_Click(object sender, RoutedEventArgs e)
         {
+            if (sender is Button btn)
+                btn.Background = Brushes.LightGreen;
             mediaPlayer.Play();
             timer.Start();
             txtStatus.Text = "Playing";
@@ -85,6 +87,7 @@ namespace Telhai.DotNet.PlayerProject
             timer.Stop();
             sliderProgress.Value = 0;
             txtStatus.Text = "Stopped";
+            btn_play.Background = Brushes.AliceBlue;
         }
         private void SliderVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -140,7 +143,7 @@ namespace Telhai.DotNet.PlayerProject
             }
         }
 
-        
+
 
 
         private void LstLibrary_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -166,6 +169,7 @@ namespace Telhai.DotNet.PlayerProject
 
         private void SaveLibrary()
         {
+            var options = new JsonSerializerOptions { WriteIndented = true };
             string json = JsonSerializer.Serialize(library);
             File.WriteAllText(FILE_NAME, json);
         }
@@ -181,6 +185,32 @@ namespace Telhai.DotNet.PlayerProject
                 //update UI
                 UpdateLibraryUI();
             }
+        }
+
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            Settings settingsWin = new Settings();
+
+            // Listen for the results
+            settingsWin.OnScanCompleted += SettingsWin_OnScanCompleted;
+
+            settingsWin.ShowDialog();
+
+        }
+
+        private void SettingsWin_OnScanCompleted(List<MusicTrack> newTracks)
+        {
+            foreach (var track in newTracks)
+            {
+                // Prevent duplicates based on FilePath
+                if (!library.Any(x => x.FilePath == track.FilePath))
+                {
+                    library.Add(track);
+                }
+            }
+
+            UpdateLibraryUI();
+            SaveLibrary();
         }
     }
 }
