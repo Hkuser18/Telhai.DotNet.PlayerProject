@@ -2,6 +2,7 @@
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Telhai.DotNet.PlayerProject.Models;
 
 
 namespace Telhai.DotNet.PlayerProject
@@ -34,6 +35,7 @@ namespace Telhai.DotNet.PlayerProject
         private void BtnRemove_Click(object sender, RoutedEventArgs e) { }
         private void LstLibrary_MouseDoubleClick(object sender, MouseButtonEventArgs e) { }
     }
+
 
 
 

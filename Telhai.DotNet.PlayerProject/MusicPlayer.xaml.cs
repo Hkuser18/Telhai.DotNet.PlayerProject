@@ -16,6 +16,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using Telhai.DotNet.PlayerProject.Models;
+using Telhai.DotNet.PlayerProject.Services;
 
 namespace Telhai.DotNet.PlayerProject
 {
@@ -29,7 +31,8 @@ namespace Telhai.DotNet.PlayerProject
         private List<MusicTrack> library = new List<MusicTrack>();
         private bool isDragging = false;
         private const string FILE_NAME = "library.json";
-
+        private readonly ItunesService _itunesService = new ItunesService();
+        private CancellationTokenSource? _cts;
 
         public MusicPlayer()
         {
@@ -143,9 +146,6 @@ namespace Telhai.DotNet.PlayerProject
             }
         }
 
-
-
-
         private void LstLibrary_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (lstLibrary.SelectedItem is MusicTrack track)
@@ -211,6 +211,80 @@ namespace Telhai.DotNet.PlayerProject
 
             UpdateLibraryUI();
             SaveLibrary();
+        }
+
+        private void PlaySong(string filePath)
+        {
+            if (!File.Exists(filePath))
+                return;
+
+            // cancel previous request
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+
+            string songName = System.IO.Path.GetFileNameWithoutExtension(filePath);
+
+            // play song locally
+            PlayLocalFile(filePath);
+
+            // clear ui
+            ClearSongInfo();
+
+            // async API call
+            _ = LoadSongInfoAsync(songName, _cts.Token);
+        }
+
+        private void PlayLocalFile(string filePath)
+        {
+            MediaPlayer player = new MediaPlayer();
+            player.Open(new Uri(filePath));
+            player.Play();
+        }
+
+        private async Task LoadSongInfoAsync(
+            string songName,
+            CancellationToken token)
+        {
+            try
+            {
+                ItunesTrackInfo? info =
+                    await _itunesService.SearchOneAsync(songName, token);
+
+                if (info == null)
+                {
+                    return;
+                }
+
+                // return to UI thread 
+                Dispatcher.Invoke(() =>
+                {
+
+                    if (!string.IsNullOrWhiteSpace(info.ArtworkUrl))
+                    {
+                        AlbumImage.Source =
+                            new BitmapImage(new Uri(info.ArtworkUrl));
+                    }
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // switch song, ignore
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    StatusText.Text = "Error loading song info.";
+                });
+            }
+        }
+
+        private void ClearSongInfo()
+        {
+            TrackNameText.Text = "";
+            ArtistNameText.Text = "";
+            AlbumNameText.Text = "";
+            AlbumImage.Source = null;
         }
     }
 }

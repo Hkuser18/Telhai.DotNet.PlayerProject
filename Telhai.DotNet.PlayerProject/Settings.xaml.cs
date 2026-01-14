@@ -13,6 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
+using Telhai.DotNet.PlayerProject.Models;
 
 namespace Telhai.DotNet.PlayerProject
 {

@@ -1,4 +1,4 @@
-﻿namespace Telhai.DotNet.PlayerProject
+﻿namespace Telhai.DotNet.PlayerProject.Models
 {
     public class MusicTrack
     {
