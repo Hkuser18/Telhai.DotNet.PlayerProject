@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36705.20
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telhai.DotNet.PlayerProject", "Telhai.DotNet.PlayerProject\Telhai.DotNet.PlayerProject.csproj", "{A756ADD3-F753-4BB8-9DDD-4A5D1451F87D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Telhai.DotNet.HadarKeller.PlayerProject", "Telhai.DotNet.PlayerProject\Telhai.DotNet.HadarKeller.PlayerProject.csproj", "{A756ADD3-F753-4BB8-9DDD-4A5D1451F87D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

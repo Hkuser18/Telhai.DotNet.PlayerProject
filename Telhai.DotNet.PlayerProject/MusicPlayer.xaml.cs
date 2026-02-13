@@ -15,10 +15,11 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
-using Telhai.DotNet.PlayerProject.Models;
-using Telhai.DotNet.PlayerProject.Services;
+using Telhai.DotNet.HadarKeller.PlayerProject.Models;
+using Telhai.DotNet.HadarKeller.PlayerProject.Services;
+using Telhai.DotNet.HadarKeller.PlayerProject.ViewModels;
 
-namespace Telhai.DotNet.PlayerProject
+namespace Telhai.DotNet.HadarKeller.PlayerProject
 {
     /// <summary>
     /// Interaction logic for MusicPlayer.xaml
@@ -28,12 +29,16 @@ namespace Telhai.DotNet.PlayerProject
         private const string PlaceholderImageUri = "pack://application:,,,/Assets/placeholder.jpg";
         private MediaPlayer mediaPlayer = new MediaPlayer();
         private DispatcherTimer timer = new DispatcherTimer();
+        private DispatcherTimer imageRotationTimer = new DispatcherTimer();
         private List<MusicTrack> library = new List<MusicTrack>();
         private bool isDragging = false;
         private const string FILE_NAME = "library.json";
         private readonly ItunesService _itunesService = new ItunesService();
+        private readonly SongMetadataStore _metadataStore = new SongMetadataStore();
         private CancellationTokenSource? _cts;
         private MusicTrack? currentTrack;
+        private List<string> currentImageList = new List<string>();
+        private int currentImageIndex = 0;
 
         public MusicPlayer()
         {
@@ -41,22 +46,17 @@ namespace Telhai.DotNet.PlayerProject
             timer.Interval = TimeSpan.FromMilliseconds(500);
             timer.Tick += new EventHandler(Timer_Tick);
 
+            // Image rotation timer - change image every 3 seconds
+            imageRotationTimer.Interval = TimeSpan.FromSeconds(3);
+            imageRotationTimer.Tick += ImageRotationTimer_Tick;
+
             this.Loaded += MusicPlayer_Loaded;
-            //this.MouseDoubleClick += MusicPlayer_MouseDoubleClick;
-            //this.MouseDoubleClick += new MouseButtonEventHandler(MusicPlayer_MouseDoubleClick);
         }
 
         private void MusicPlayer_Loaded(object sender, RoutedEventArgs e)
         {
             this.LoadLibrary();
             SetPlaceholderImage();
-        }
-
-        //override
-
-        private void MusicPlayer_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            MessageBox.Show("Music Player Window Double Clicked!");
         }
 
         private void Timer_Tick(object? sender, EventArgs e)
@@ -67,6 +67,18 @@ namespace Telhai.DotNet.PlayerProject
                 sliderProgress.Maximum = mediaPlayer.NaturalDuration.TimeSpan.TotalSeconds;
                 sliderProgress.Value = mediaPlayer.Position.TotalSeconds;
             }
+        }
+
+        /// <summary>
+        /// Rotates through custom images during playback
+        /// </summary>
+        private void ImageRotationTimer_Tick(object? sender, EventArgs e)
+        {
+            if (currentImageList.Count == 0)
+                return;
+
+            currentImageIndex = (currentImageIndex + 1) % currentImageList.Count;
+            DisplayImageFromList(currentImageIndex);
         }
 
         //handler for play button
@@ -86,12 +98,18 @@ namespace Telhai.DotNet.PlayerProject
 
             mediaPlayer.Play();
             timer.Start();
+            
+            // Start image rotation if custom images exist
+            if (currentImageList.Count > 0)
+                imageRotationTimer.Start();
+            
             txtStatus.Text = "Playing";
         }
 
         private void BtnPause_Click(object sender, RoutedEventArgs e)
         {
             mediaPlayer.Pause();
+            imageRotationTimer.Stop();
             txtStatus.Text = "Paused";
         }
 
@@ -99,14 +117,17 @@ namespace Telhai.DotNet.PlayerProject
         {
             mediaPlayer.Stop();
             timer.Stop();
+            imageRotationTimer.Stop();
             sliderProgress.Value = 0;
             txtStatus.Text = "Stopped";
             btn_play.Background = Brushes.AliceBlue;
         }
+        
         private void SliderVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             mediaPlayer.Volume = sliderVolume.Value;
         }
+        
         private void Slider_DragStarted(object sender, MouseButtonEventArgs e)
         {
             isDragging = true; // Stop timer updates
@@ -165,11 +186,54 @@ namespace Telhai.DotNet.PlayerProject
             }
         }
 
+        /// <summary>
+        /// Displays song metadata when a track is selected (single click)
+        /// Loads from cache if available, without calling API
+        /// </summary>
         private void LstLibrary_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (lstLibrary.SelectedItem is MusicTrack track)
             {
                 UpdateSelectionInfo(track);
+                
+                // Display cached metadata if available (no API call)
+                SongMetadata? metadata = _metadataStore.GetByFilePath(track.FilePath);
+                if (metadata != null)
+                {
+                    DisplayMetadata(metadata, track.FilePath, fromCache: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Opens the Edit Song window for the selected track
+        /// </summary>
+        private void BtnEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (lstLibrary.SelectedItem is MusicTrack track)
+            {
+                SongMetadata? metadata = _metadataStore.GetByFilePath(track.FilePath);
+                
+                SongEditViewModel viewModel = new SongEditViewModel(track, metadata, _metadataStore);
+                EditSongWindow editWindow = new EditSongWindow(viewModel)
+                {
+                    Owner = this
+                };
+                
+                editWindow.ShowDialog();
+                
+                // Refresh display if this is the currently playing track
+                if (currentTrack?.FilePath == track.FilePath)
+                {
+                    SongMetadata? updatedMetadata = _metadataStore.GetByFilePath(track.FilePath);
+                    if (updatedMetadata != null)
+                    {
+                        DisplayMetadata(updatedMetadata, track.FilePath, fromCache: true);
+                        
+                        // Update the current song title display
+                        txtCurrentSong.Text = updatedMetadata.CustomTitle ?? updatedMetadata.TrackName ?? track.Title;
+                    }
+                }
             }
         }
 
@@ -228,6 +292,9 @@ namespace Telhai.DotNet.PlayerProject
             SaveLibrary();
         }
 
+        /// <summary>
+        /// Plays a song and loads metadata from cache or API
+        /// </summary>
         private void PlaySong(MusicTrack track)
         {
             if (!File.Exists(track.FilePath))
@@ -239,19 +306,33 @@ namespace Telhai.DotNet.PlayerProject
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
 
-            string songName = GetSearchTerm(track.FilePath);
-
             // play song locally
             PlayLocalFile(track.FilePath);
 
             // clear ui
             ClearSongInfo();
             UpdateSelectionInfo(track);
-            txtCurrentSong.Text = track.Title;
-            txtStatus.Text = "Playing";
-
-            // async API call
-            _ = LoadSongInfoAsync(songName, track.FilePath, _cts.Token);
+            
+            // Check if metadata already exists in cache
+            SongMetadata? metadata = _metadataStore.GetByFilePath(track.FilePath);
+            
+            if (metadata != null)
+            {
+                // Display cached metadata (no API call needed)
+                DisplayMetadata(metadata, track.FilePath, fromCache: true);
+                txtCurrentSong.Text = metadata.CustomTitle ?? metadata.TrackName ?? track.Title;
+                txtStatus.Text = "Playing (cached)";
+            }
+            else
+            {
+                // No cached metadata, fetch from API
+                string songName = GetSearchTerm(track.FilePath);
+                txtCurrentSong.Text = track.Title;
+                txtStatus.Text = "Playing";
+                
+                // async API call and save to cache
+                _ = LoadSongInfoAsync(songName, track.FilePath, _cts.Token);
+            }
         }
 
         private void PlayLocalFile(string filePath)
@@ -267,6 +348,9 @@ namespace Telhai.DotNet.PlayerProject
             return fileName.Replace('-', ' ').Trim();
         }
 
+        /// <summary>
+        /// Fetches song info from iTunes API and saves to metadata store
+        /// </summary>
         private async Task LoadSongInfoAsync(
             string songName,
             string filePath,
@@ -286,24 +370,21 @@ namespace Telhai.DotNet.PlayerProject
                     return;
                 }
 
+                // Save metadata to store
+                SongMetadata metadata = new SongMetadata
+                {
+                    FilePath = filePath,
+                    TrackName = info.TrackName,
+                    ArtistName = info.ArtistName,
+                    AlbumName = info.AlbumName,
+                    ArtworkUrl = info.ArtworkUrl
+                };
+                _metadataStore.Upsert(metadata);
+
                 // return to UI thread 
                 Dispatcher.Invoke(() =>
                 {
-                    TrackNameText.Text = info.TrackName ?? System.IO.Path.GetFileNameWithoutExtension(filePath);
-                    ArtistNameText.Text = info.ArtistName ?? string.Empty;
-                    AlbumNameText.Text = info.AlbumName ?? string.Empty;
-                    FilePathText.Text = filePath;
-                    StatusText.Text = "Info loaded.";
-
-                    if (!string.IsNullOrWhiteSpace(info.ArtworkUrl))
-                    {
-                        AlbumImage.Source =
-                            new BitmapImage(new Uri(info.ArtworkUrl));
-                    }
-                    else
-                    {
-                        SetPlaceholderImage();
-                    }
+                    DisplayMetadata(metadata, filePath, fromCache: false);
                 });
             }
             catch (OperationCanceledException)
@@ -324,6 +405,96 @@ namespace Telhai.DotNet.PlayerProject
             }
         }
 
+        /// <summary>
+        /// Displays metadata in the UI, handling custom images and rotation
+        /// </summary>
+        private void DisplayMetadata(SongMetadata metadata, string filePath, bool fromCache)
+        {
+            string displayTitle = metadata.CustomTitle ?? metadata.TrackName ?? System.IO.Path.GetFileNameWithoutExtension(filePath);
+            
+            TrackNameText.Text = displayTitle;
+            ArtistNameText.Text = metadata.ArtistName ?? string.Empty;
+            AlbumNameText.Text = metadata.AlbumName ?? string.Empty;
+            FilePathText.Text = filePath;
+            StatusText.Text = fromCache ? "Info loaded from cache." : "Info loaded from API.";
+
+            // Prepare image list for rotation
+            currentImageList.Clear();
+            currentImageIndex = 0;
+            
+            // Priority: Custom images > API artwork > Placeholder
+            if (metadata.ImagePaths != null && metadata.ImagePaths.Count > 0)
+            {
+                // Add valid custom images
+                foreach (var imagePath in metadata.ImagePaths)
+                {
+                    if (File.Exists(imagePath))
+                    {
+                        currentImageList.Add(imagePath);
+                    }
+                }
+            }
+            
+            // If no custom images, fall back to API artwork
+            if (currentImageList.Count == 0 && !string.IsNullOrWhiteSpace(metadata.ArtworkUrl))
+            {
+                currentImageList.Add(metadata.ArtworkUrl);
+            }
+            
+            // Display first image or placeholder
+            if (currentImageList.Count > 0)
+            {
+                DisplayImageFromList(0);
+                
+                // Start rotation if playing and multiple images
+                if (currentImageList.Count > 1 && mediaPlayer.Source != null)
+                {
+                    imageRotationTimer.Start();
+                }
+                else
+                {
+                    imageRotationTimer.Stop();
+                }
+            }
+            else
+            {
+                SetPlaceholderImage();
+                imageRotationTimer.Stop();
+            }
+        }
+
+        /// <summary>
+        /// Displays an image from the current image list by index
+        /// </summary>
+        private void DisplayImageFromList(int index)
+        {
+            if (index < 0 || index >= currentImageList.Count)
+                return;
+
+            string imagePath = currentImageList[index];
+            
+            try
+            {
+                // Check if it's a local file or URL
+                if (File.Exists(imagePath))
+                {
+                    AlbumImage.Source = new BitmapImage(new Uri(imagePath, UriKind.Absolute));
+                }
+                else if (Uri.TryCreate(imagePath, UriKind.Absolute, out Uri? uri))
+                {
+                    AlbumImage.Source = new BitmapImage(uri);
+                }
+                else
+                {
+                    SetPlaceholderImage();
+                }
+            }
+            catch
+            {
+                SetPlaceholderImage();
+            }
+        }
+
         private void DisplayLocalInfo(MusicTrack track)
         {
             TrackNameText.Text = track.Title;
@@ -337,6 +508,8 @@ namespace Telhai.DotNet.PlayerProject
             AlbumNameText.Text = "";
             FilePathText.Text = "";
             SetPlaceholderImage();
+            currentImageList.Clear();
+            imageRotationTimer.Stop();
         }
 
         private void UpdateSelectionInfo(MusicTrack track)

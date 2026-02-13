@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace Telhai.DotNet.PlayerProject
+namespace Telhai.DotNet.HadarKeller.PlayerProject
 {
     public class AppSettings
     {
