@@ -1,5 +1,4 @@
-﻿
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -26,6 +25,7 @@ namespace Telhai.DotNet.PlayerProject
     /// </summary>
     public partial class MusicPlayer : Window
     {
+        private const string PlaceholderImageUri = "pack://application:,,,/Assets/placeholder.jpg";
         private MediaPlayer mediaPlayer = new MediaPlayer();
         private DispatcherTimer timer = new DispatcherTimer();
         private List<MusicTrack> library = new List<MusicTrack>();
@@ -33,6 +33,7 @@ namespace Telhai.DotNet.PlayerProject
         private const string FILE_NAME = "library.json";
         private readonly ItunesService _itunesService = new ItunesService();
         private CancellationTokenSource? _cts;
+        private MusicTrack? currentTrack;
 
         public MusicPlayer()
         {
@@ -48,6 +49,7 @@ namespace Telhai.DotNet.PlayerProject
         private void MusicPlayer_Loaded(object sender, RoutedEventArgs e)
         {
             this.LoadLibrary();
+            SetPlaceholderImage();
         }
 
         //override
@@ -67,12 +69,21 @@ namespace Telhai.DotNet.PlayerProject
             }
         }
 
-
-        // --- EMPTY PLACEHOLDERS TO MAKE IT BUILD ---
+        //handler for play button
         private void BtnPlay_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn)
                 btn.Background = Brushes.LightGreen;
+
+            if (lstLibrary.SelectedItem is MusicTrack track)
+            {
+                if (currentTrack == null || currentTrack.FilePath != track.FilePath)
+                {
+                    PlaySong(track);
+                    return;
+                }
+            }
+
             mediaPlayer.Play();
             timer.Start();
             txtStatus.Text = "Playing";
@@ -150,11 +161,15 @@ namespace Telhai.DotNet.PlayerProject
         {
             if (lstLibrary.SelectedItem is MusicTrack track)
             {
-                mediaPlayer.Open(new Uri(track.FilePath));
-                mediaPlayer.Play();
-                timer.Start();
-                txtCurrentSong.Text = track.Title;
-                txtStatus.Text = "Playing";
+                PlaySong(track);
+            }
+        }
+
+        private void LstLibrary_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (lstLibrary.SelectedItem is MusicTrack track)
+            {
+                DisplayLocalInfo(track);
             }
         }
 
@@ -181,7 +196,7 @@ namespace Telhai.DotNet.PlayerProject
                 //read File
                 string json = File.ReadAllText(FILE_NAME);
                 //Create list from json or empty list if null
-                library = JsonSerializer.Deserialize<List<MusicTrack>>(json) ?? new List<MusicTrack>();
+                 library = JsonSerializer.Deserialize<List<MusicTrack>>(json) ?? new List<MusicTrack>();
                 //update UI
                 UpdateLibraryUI();
             }
@@ -213,36 +228,47 @@ namespace Telhai.DotNet.PlayerProject
             SaveLibrary();
         }
 
-        private void PlaySong(string filePath)
+        private void PlaySong(MusicTrack track)
         {
-            if (!File.Exists(filePath))
+            if (!File.Exists(track.FilePath))
                 return;
+
+            currentTrack = track;
 
             // cancel previous request
             _cts?.Cancel();
             _cts = new CancellationTokenSource();
 
-            string songName = System.IO.Path.GetFileNameWithoutExtension(filePath);
+            string songName = GetSearchTerm(track.FilePath);
 
             // play song locally
-            PlayLocalFile(filePath);
+            PlayLocalFile(track.FilePath);
 
             // clear ui
             ClearSongInfo();
+            DisplayLocalInfo(track);
+            txtStatus.Text = "Playing";
 
             // async API call
-            _ = LoadSongInfoAsync(songName, _cts.Token);
+            _ = LoadSongInfoAsync(songName, track.FilePath, _cts.Token);
         }
 
         private void PlayLocalFile(string filePath)
         {
-            MediaPlayer player = new MediaPlayer();
-            player.Open(new Uri(filePath));
-            player.Play();
+            mediaPlayer.Open(new Uri(filePath));
+            mediaPlayer.Play();
+            timer.Start();
+        }
+
+        private static string GetSearchTerm(string filePath)
+        {
+            string fileName = System.IO.Path.GetFileNameWithoutExtension(filePath);
+            return fileName.Replace('-', ' ').Trim();
         }
 
         private async Task LoadSongInfoAsync(
             string songName,
+            string filePath,
             CancellationToken token)
         {
             try
@@ -252,17 +278,30 @@ namespace Telhai.DotNet.PlayerProject
 
                 if (info == null)
                 {
+                    Dispatcher.Invoke(() =>
+                    {
+                        StatusText.Text = "No information found.";
+                    });
                     return;
                 }
 
                 // return to UI thread 
                 Dispatcher.Invoke(() =>
                 {
+                    TrackNameText.Text = info.TrackName ?? System.IO.Path.GetFileNameWithoutExtension(filePath);
+                    ArtistNameText.Text = info.ArtistName ?? string.Empty;
+                    AlbumNameText.Text = info.AlbumName ?? string.Empty;
+                    FilePathText.Text = filePath;
+                    StatusText.Text = "Info loaded.";
 
                     if (!string.IsNullOrWhiteSpace(info.ArtworkUrl))
                     {
                         AlbumImage.Source =
                             new BitmapImage(new Uri(info.ArtworkUrl));
+                    }
+                    else
+                    {
+                        SetPlaceholderImage();
                     }
                 });
             }
@@ -270,13 +309,24 @@ namespace Telhai.DotNet.PlayerProject
             {
                 // switch song, ignore
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 Dispatcher.Invoke(() =>
                 {
+                    TrackNameText.Text = System.IO.Path.GetFileNameWithoutExtension(filePath);
+                    ArtistNameText.Text = string.Empty;
+                    AlbumNameText.Text = string.Empty;
+                    FilePathText.Text = filePath;
                     StatusText.Text = "Error loading song info.";
+                    SetPlaceholderImage();
                 });
             }
+        }
+
+        private void DisplayLocalInfo(MusicTrack track)
+        {
+            TrackNameText.Text = track.Title;
+            FilePathText.Text = track.FilePath;
         }
 
         private void ClearSongInfo()
@@ -284,7 +334,13 @@ namespace Telhai.DotNet.PlayerProject
             TrackNameText.Text = "";
             ArtistNameText.Text = "";
             AlbumNameText.Text = "";
-            AlbumImage.Source = null;
+            FilePathText.Text = "";
+            SetPlaceholderImage();
+        }
+
+        private void SetPlaceholderImage()
+        {
+            AlbumImage.Source = new BitmapImage(new Uri(PlaceholderImageUri));
         }
     }
 }
