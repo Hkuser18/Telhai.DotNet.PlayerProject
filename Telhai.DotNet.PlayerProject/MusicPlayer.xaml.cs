@@ -169,7 +169,7 @@ namespace Telhai.DotNet.PlayerProject
         {
             if (lstLibrary.SelectedItem is MusicTrack track)
             {
-                DisplayLocalInfo(track);
+                UpdateSelectionInfo(track);
             }
         }
 
@@ -246,7 +246,8 @@ namespace Telhai.DotNet.PlayerProject
 
             // clear ui
             ClearSongInfo();
-            DisplayLocalInfo(track);
+            UpdateSelectionInfo(track);
+            txtCurrentSong.Text = track.Title;
             txtStatus.Text = "Playing";
 
             // async API call
@@ -338,6 +339,12 @@ namespace Telhai.DotNet.PlayerProject
             SetPlaceholderImage();
         }
 
+        private void UpdateSelectionInfo(MusicTrack track)
+        {
+            SelectedFileText.Text = track.Title;
+            SelectedPathText.Text = track.FilePath;
+        }
+        
         private void SetPlaceholderImage()
         {
             AlbumImage.Source = new BitmapImage(new Uri(PlaceholderImageUri));
