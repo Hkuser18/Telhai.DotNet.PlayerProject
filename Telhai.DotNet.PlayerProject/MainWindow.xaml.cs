@@ -2,10 +2,10 @@
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Telhai.DotNet.PlayerProject.Models;
+using Telhai.DotNet.HadarKeller.PlayerProject.Models;
 
 
-namespace Telhai.DotNet.PlayerProject
+namespace Telhai.DotNet.HadarKeller.PlayerProject
 {
     public partial class MainWindow : Window
     {

@@ -5,9 +5,9 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Telhai.DotNet.PlayerProject.Models;
+using Telhai.DotNet.HadarKeller.PlayerProject.Models;
 
-namespace Telhai.DotNet.PlayerProject.Services
+namespace Telhai.DotNet.HadarKeller.PlayerProject.Services
 {
     /// <summary>
     /// service calling iTunes Search API

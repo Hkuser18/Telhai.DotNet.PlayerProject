@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
-namespace Telhai.DotNet.PlayerProject.Models
+namespace Telhai.DotNet.HadarKeller.PlayerProject.Models
 {
     public class ItunesResultItem
     {

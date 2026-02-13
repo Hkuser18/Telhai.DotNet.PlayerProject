@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace Telhai.DotNet.PlayerProject
+namespace Telhai.DotNet.HadarKeller.PlayerProject
 {
     /// <summary>
     /// Interaction logic for App.xaml
